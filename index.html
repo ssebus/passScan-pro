@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PassScan Extreme - Pink Edition</title>
+    <!-- QuaggaJS do ultraszybkiego skanowania klasycznych kodów kreskowych -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: linear-gradient(135deg, #1a051d, #2e0836, #0f0212);
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 12px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 440px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-bottom: 50px;
+        }
+
+        /* Różowy Nagłówek i Statystyki */
+        .header-card {
+            background: rgba(45, 10, 56, 0.75);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(244, 114, 182, 0.2);
+            border-radius: 22px;
+            padding: 16px;
+            box-shadow: 0 15px 35px rgba(236, 72, 153, 0.2);
+        }
+        .app-title {
+            font-size: 1.15rem;
+            font-weight: 800;
+            margin: 0 0 12px 0;
+            color: #f472b6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            text-align: center;
+        }
+        .stat-box {
+            background: rgba(20, 4, 26, 0.6);
+            border: 1px solid rgba(244, 114, 182, 0.1);
+            padding: 8px 4px;
+            border-radius: 14px;
+        }
+        .stat-num {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #34d399;
+        }
+        .stat-lbl {
+            font-size: 0.62rem;
+            color: #f7a8d8;
+            text-transform: uppercase;
+            margin-top: 2px;
+            font-weight: 700;
+        }
+
+        /* Przełącznik Wejście / Wyjście */
+        .direction-toggle {
+            display: none;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            background: rgba(20, 4, 26, 0.8);
+            padding: 4px;
+            border-radius: 12px;
+            border: 1px solid rgba(244, 114, 182, 0.15);
+            margin-bottom: 10px;
+        }
+        .dir-btn {
+            background: transparent;
+            border: none;
+            color: #f7a8d8;
+            padding: 8px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .dir-btn.active-in {
+            background: #059669;
+            color: white;
+        }
+        .dir-btn.active-out {
+            background: #dc2626;
+            color: white;
+        }
+
+        /* Nawigacja / Zakładki */
+        .nav-tabs {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            background: rgba(20, 4, 26, 0.85);
+            padding: 5px;
+            border-radius: 16px;
+            border: 1px solid rgba(244, 114, 182, 0.15);
+        }
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: #f7a8d8;
+            padding: 10px 2px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .tab-btn.active {
+            background: linear-gradient(135deg, #db2777, #f472b6);
+            color: white;
+            box-shadow: 0 4px 15px rgba(219, 39, 119, 0.5);
+        }
+
+        /* Panele */
+        .panel {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .panel.active {
+            display: flex;
+        }
+
+        .card {
+            background: rgba(45, 10, 56, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(244, 114, 182, 0.15);
+            border-radius: 20px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        }
+
+        /* Skaner z kamerą i kontener Quagga */
+        .camera-box {
+            position: relative;
+            width: 100%;
+            height: 240px;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid #db2777;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #interactive.viewport {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #interactive.viewport video, canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .scanner-laser {
+            position: absolute;
+            width: 80%;
+            height: 2px;
+            background: #f472b6;
+            box-shadow: 0 0 12px #f472b6;
+            animation: scanAnim 2s infinite ease-in-out;
+            pointer-events: none;
+            z-index: 10;
+        }
+        @keyframes scanAnim {
+            0% { top: 15%; }
+            50% { top: 85%; }
+            100% { top: 15%; }
+        }
+
+        /* Komunikaty wyników */
+        .scan-result-card {
+            text-align: center;
+            padding: 14px;
+            border-radius: 14px;
+            font-weight: bold;
+            font-size: 0.95rem;
+            display: none;
+        }
+        .scan-success { background: rgba(52, 211, 153, 0.2); border: 2px solid #34d399; color: #6ee7b7; }
+        .scan-error { background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; color: #f87171; }
+        .scan-warn { background: rgba(251, 191, 36, 0.2); border: 2px solid #fbbf24; color: #fde047; }
+
+        /* Formularze i przyciski */
+        .form-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            font-size: 0.72rem;
+            color: #f7a8d8;
+            margin-bottom: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        input, select, textarea {
+            width: 100%;
+            background: rgba(15, 2, 18, 0.85);
+            border: 1px solid #701a75;
+            color: white;
+            padding: 10px 12px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: #f472b6;
+        }
+        .btn {
+            background: linear-gradient(135deg, #db2777, #be185d);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 15px rgba(219, 39, 119, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #991b1b); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
+        .btn-success { background: linear-gradient(135deg, #059669, #047857); box-shadow: 0 4px 15px rgba(5, 150, 105, 0.4); }
+        .btn-purple { background: linear-gradient(135deg, #7c3aed, #5b21b6); box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4); }
+
+        /* Lista biletów */
+        .ticket-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 320px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .ticket-item {
+            background: rgba(20, 4, 26, 0.75);
+            border: 1px solid rgba(244, 114, 182, 0.1);
+            padding: 10px 12px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .ticket-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .ticket-code {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #f472b6;
+            font-weight: bold;
+        }
+        .ticket-meta {
+            font-size: 0.68rem;
+            color: #f7a8d8;
+        }
+        .ticket-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .icon-btn {
+            background: #581c87;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+        }
+        .row-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <!-- Nagłówek Statystyk -->
+        <div class="header-card">
+            <div class="app-title">
+                <span>🎟️ PassScan Extreme Pink</span>
+                <span id="db-count" style="font-size:0.75rem; color:#f7a8d8;">0 kodów</span>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-num" id="stat-total">0</div>
+                    <div class="stat-lbl">Baza</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="stat-scanned" style="color:#f472b6;">0</div>
+                    <div class="stat-lbl">Wejścia</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="stat-max">150</div>
+                    <div class="stat-lbl">Limit</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Menu Nawigacji -->
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('scan')">📷 Skaner</button>
+            <button class="tab-btn" onclick="switchTab('generator')">⚡ Generator</button>
+            <button class="tab-btn" onclick="switchTab('database')">📋 Baza</button>
+            <button class="tab-btn" onclick="switchTab('settings')">⚙️ Ustawienia</button>
+        </div>
+
+        <!-- PANEL 1: SKANER KODÓW KRESKOWYCH -->
+        <div class="panel active" id="panel-scan">
+            <div class="direction-toggle" id="directionToggleBar">
+                <button class="dir-btn active-in" id="btnModeIn" onclick="setScanDirection('in')">📥 WEJŚCIE</button>
+                <button class="dir-btn" id="btnModeOut" onclick="setScanDirection('out')">📤 WYJŚCIE</button>
+            </div>
+
+            <div class="card">
+                <div class="camera-box">
+                    <!-- Kontener dla QuaggaJS -->
+                    <div id="interactive" class="viewport"></div>
+                    <div class="scanner-laser"></div>
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 6px;">
+                    <button class="btn" onclick="startBarcodeScanner()" style="flex: 1;">▶ Włącz aparat</button>
+                    <button class="btn btn-danger" onclick="stopBarcodeScanner()" style="flex: 1;">⏹ Wyłącz</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <label>Wpisz kod ręcznie lub zasymuluj:</label>
+                <div style="display: flex; gap: 6px;">
+                    <input type="text" id="manual-input-code" placeholder="Wprowadź kod kreskowy...">
+                    <button class="btn" onclick="verifyTicket(document.getElementById('manual-input-code').value)" style="width: 100px;">Sprawdź</button>
+                </div>
+            </div>
+
+            <div id="scan-result-box" class="scan-result-card">
+                Wynik skanowania
+            </div>
+        </div>
+
+        <!-- PANEL 2: GENERATOR MASOWY -->
+        <div class="panel" id="panel-generator">
+            <div class="card">
+                <h3 style="margin: 0 0 10px 0; font-size: 0.95rem; color: #f472b6;">✨ Ekstremalny Generator Kodów</h3>
+                
+                <div class="row-group">
+                    <div class="form-group">
+                        <label>Zestaw znaków:</label>
+                        <select id="gen-type">
+                            <option value="alphanumeric">Litery + Cyfry</option>
+                            <option value="numeric">Tylko Cyfry</option>
+                            <option value="alpha">Tylko Litery</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Długość kodu:</label>
+                        <input type="number" id="gen-length" value="10" min="4" max="32">
+                    </div>
+                </div>
+
+                <div class="row-group">
+                    <div class="form-group">
+                        <label>Ilość sztuk:</label>
+                        <input type="number" id="gen-count" value="20" min="1" max="1000">
+                    </div>
+                    <div class="form-group">
+                        <label>Opcjonalny Prefiks:</label>
+                        <input type="text" id="gen-prefix" placeholder="np. VIP-">
+                    </div>
+                </div>
+
+                <button class="btn btn-success" onclick="generateBatchCodes()">⚡ Wygeneruj i zapisz w bazie</button>
+            </div>
+
+            <div class="card">
+                <h3 style="margin: 0 0 10px 0; font-size: 0.95rem; color: #f472b6;">📥 Import Listy Kodów</h3>
+                <div class="form-group">
+                    <label>Wklej kody z pliku/kartki (oddzielone przecinkiem lub enterem):</label>
+                    <textarea id="import-textarea" rows="3" placeholder="Wklej kody..."></textarea>
+                </div>
+                <button class="btn btn-purple" onclick="importCustomCodes()">Zaimportuj kody</button>
+            </div>
+        </div>
+
+        <!-- PANEL 3: ZARZĄDZANIE BAZĄ -->
+        <div class="panel" id="panel-database">
+            <div class="card">
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <input type="text" id="search-input" placeholder="🔍 Szukaj kodu w bazie..." oninput="updateUI()">
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 0.75rem; color: #f7a8d8;" id="filter-info">Wszystkie kody</span>
+                    <button class="btn btn-danger" onclick="clearAllTickets()" style="padding: 4px 8px; font-size: 0.68rem; width: auto;">Wyczyść bazę</button>
+                </div>
+                <div class="ticket-list" id="ticketListContainer"></div>
+            </div>
+            <div class="card" style="display: flex; gap: 6px;">
+                <button class="btn btn-purple" onclick="exportData()" style="font-size:0.8rem;">📤 Eksportuj JSON</button>
+                <button class="btn" onclick="importDataPrompt()" style="font-size:0.8rem;">📥 Import JSON</button>
+            </div>
+        </div>
+
+        <!-- PANEL 4: USTAWIENIA -->
+        <div class="panel" id="panel-settings">
+            <div class="card">
+                <h3 style="margin: 0 0 12px 0; font-size: 0.95rem; color: #f472b6;">⚙️ Reguły i Limity Wstępu</h3>
+
+                <div class="form-group">
+                    <label>Dozwolona liczba wejść na 1 kod:</label>
+                    <select id="setting-max-uses" onchange="saveSettings()">
+                        <option value="1">1 raz (jednorazowy bilet)</option>
+                        <option value="2">2 razy (wejście + wyjście + powrót)</option>
+                        <option value="3">3 razy</option>
+                        <option value="5">5 razy</option>
+                        <option value="999999" selected>Nieskończoność (wielokrotny wstęp)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Obsługa wychodzenia (Przełącznik Wejście/Wyjście):</label>
+                    <select id="setting-enable-exit" onchange="saveSettings()">
+                        <option value="off">Wyłączone (Tylko wejścia)</option>
+                        <option value="on">Włączone (Możliwość wyjść i powrotów)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Maksymalny limit gości / uczestników:</label>
+                    <input type="number" id="setting-max-guests" value="150" onchange="saveSettings()">
+                </div>
+
+                <div class="form-group">
+                    <label>Dźwięki powiadomień:</label>
+                    <select id="setting-sound" onchange="saveSettings()">
+                        <option value="on">Włączone (Beep)</option>
+                        <option value="off">Wyłączone</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-success" onclick="alert('Zapisano pomyślnie!')" style="margin-top: 10px;">💾 Zapisz konfigurację</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Skrypt obsługi QuaggaJS i bazy danych -->
+    <script>
+        let tickets = JSON.parse(localStorage.getItem('passextreme_tickets')) || [
+            { code: "1234567890", uses: 0, maxUses: 999999 },
+            { code: "9876543210", uses: 0, maxUses: 1 }
+        ];
+
+        let settings = JSON.parse(localStorage.getItem('passextreme_settings')) || {
+            maxUses: 999999,
+            maxGuests: 150,
+            sound: "on",
+            enableExit: "off"
+        };
+
+        let isScanningActive = false;
+        let lastScannedCode = "";
+        let lastScanTime = 0;
+        let currentDirection = "in";
+
+        window.onload = () => {
+            loadSettingsToUI();
+            updateUI();
+        };
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            
+            if(tabId === 'scan') {
+                document.getElementById('panel-scan').classList.add('active');
+                event.target.classList.add('active');
+            } else {
+                stopBarcodeScanner();
+                if(tabId === 'generator') document.getElementById('panel-generator').classList.add('active');
+                if(tabId === 'database') document.getElementById('panel-database').classList.add('active');
+                if(tabId === 'settings') document.getElementById('panel-settings').classList.add('active');
+                event.target.classList.add('active');
+            }
+        }
+
+        function loadSettingsToUI() {
+            document.getElementById('setting-max-uses').value = settings.maxUses;
+            document.getElementById('setting-max-guests').value = settings.maxGuests;
+            document.getElementById('setting-sound').value = settings.sound;
+            document.getElementById('setting-enable-exit').value = settings.enableExit;
+            updateDirectionToggleVisibility();
+        }
+
+        function saveSettings() {
+            settings.maxUses = parseInt(document.getElementById('setting-max-uses').value);
+            settings.maxGuests = parseInt(document.getElementById('setting-max-guests').value);
+            settings.sound = document.getElementById('setting-sound').value;
+            settings.enableExit = document.getElementById('setting-enable-exit').value;
+            localStorage.setItem('passextreme_settings', JSON.stringify(settings));
+            updateDirectionToggleVisibility();
+            updateUI();
+        }
+
+        function updateDirectionToggleVisibility() {
+            let toggleBar = document.getElementById('directionToggleBar');
+            if (settings.enableExit === "on") {
+                toggleBar.style.display = "grid";
+            } else {
+                toggleBar.style.display = "none";
+                currentDirection = "in";
+            }
+        }
+
+        function setScanDirection(dir) {
+            currentDirection = dir;
+            let btnIn = document.getElementById('btnModeIn');
+            let btnOut = document.getElementById('btnModeOut');
+            if (dir === 'in') {
+                btnIn.className = "dir-btn active-in";
+                btnOut.className = "dir-btn";
+            } else {
+                btnIn.className = "dir-btn";
+                btnOut.className = "dir-btn active-out";
+            }
+        }
+
+        function updateUI() {
+            localStorage.setItem('passextreme_tickets', JSON.stringify(tickets));
+            
+            document.getElementById('stat-total').innerText = tickets.length;
+            let usedCount = tickets.filter(t => t.uses > 0).length;
+            document.getElementById('stat-scanned').innerText = usedCount;
+            document.getElementById('stat-max').innerText = settings.maxGuests;
+            document.getElementById('db-count').innerText = `${tickets.length} kodów`;
+
+            let searchQuery = document.getElementById('search-input') ? document.getElementById('search-input').value.toLowerCase() : "";
+            let container = document.getElementById('ticketListContainer');
+            if(!container) return;
+
+            let filtered = tickets.filter(t => t.code.toLowerCase().includes(searchQuery));
+
+            if(filtered.length === 0) {
+                container.innerHTML = '<div style="color: #f7a8d8; font-size: 0.75rem; text-align: center; padding: 10px;">Brak pasujących kodów.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            filtered.slice().reverse().forEach((t, idx) => {
+                let realIdx = tickets.indexOf(t);
+                let div = document.createElement('div');
+                div.className = 'ticket-item';
+                div.innerHTML = `
+                    <div class="ticket-info">
+                        <span class="ticket-code">${t.code}</span>
+                        <span class="ticket-meta">Użycia: ${t.uses} / ${t.maxUses === 999999 ? '∞' : t.maxUses}</span>
+                    </div>
+                    <div class="ticket-actions">
+                        <button class="icon-btn" onclick="verifyTicket('${t.code}')" title="Sprawdź">✔️</button>
+                        <button class="icon-btn" onclick="resetTicket(${realIdx})" title="Resetuj użycia" style="background:#059669;">🔄</button>
+                        <button class="icon-btn" onclick="deleteTicket(${realIdx})" title="Usuń" style="background:#ef4444;">🗑️</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // --- BŁYSKAWICZNY SKANER KODÓW KRESKOWYCH (QUAGGAGS) ---
+        function startBarcodeScanner() {
+            if (isScanningActive) return;
+
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#interactive'),
+                    constraints: {
+                        facingMode: "environment" // Tylny aparat
+                    },
+                },
+                decoder: {
+                    readers: [
+                        "code_128_reader",
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_39_reader",
+                        "upc_reader",
+                        "upc_e_reader"
+                    ]
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error("Błąd Quagga:", err);
+                    alert("Nie można uruchomić aparatu dla kodów kreskowych.");
+                    return;
+                }
+                Quagga.start();
+                isScanningActive = true;
+            });
+
+            Quagga.onDetected(function(result) {
+                let code = result.codeResult.code;
+                let now = Date.now();
+                
+                // Ochrona przed wielokrotnym natychmiastowym odczytem tego samego kodu (2 sekundy przerwy)
+                if (code && (code !== lastScannedCode || (now - lastScanTime) > 2000)) {
+                    lastScannedCode = code;
+                    lastScanTime = now;
+                    verifyTicket(code);
+                }
+            });
+        }
+
+        function stopBarcodeScanner() {
+            if (isScanningActive) {
+                Quagga.stop();
+                isScanningActive = false;
+            }
+        }
+
+        // --- WERYFIKACJA BILETU ---
+        function verifyTicket(code) {
+            code = code.trim();
+            let resBox = document.getElementById('scan-result-box');
+            resBox.style.display = 'block';
+
+            if (!code) {
+                resBox.className = "scan-result-card scan-error";
+                resBox.innerText = "❌ Wprowadź lub zeskanuj kod!";
+                return;
+            }
+
+            let ticket = tickets.find(t => t.code === code);
+
+            if (!ticket) {
+                resBox.className = "scan-result-card scan-error";
+                resBox.innerText = `❌ BŁĄD: Kod "${code}" nie istnieje w bazie!`;
+                if(settings.sound === "on") playBeep(300, 300);
+                return;
+            }
+
+            let maxLimit = ticket.maxUses !== undefined ? ticket.maxUses : settings.maxUses;
+
+            // TRYB WYJŚCIA
+            if (settings.enableExit === "on" && currentDirection === "out") {
+                if (ticket.uses <= 0) {
+                    resBox.className = "scan-result-card scan-warn";
+                    resBox.innerText = `⚠️ BŁĄD WYJŚCIA: Kod "${code}" nie był użyty!`;
+                    if(settings.sound === "on") playBeep(400, 400);
+                    return;
+                }
+                ticket.uses -= 1;
+                updateUI();
+                resBox.className = "scan-result-card scan-success";
+                resBox.style.borderColor = "#dc2626";
+                resBox.innerText = `📤 WYJŚCIE ZATWIERDZONE! Pozostało: ${ticket.uses}`;
+                if(settings.sound === "on") playBeep(600, 150);
+                document.getElementById('manual-input-code').value = '';
+                return;
+            }
+
+            // TRYB WEJŚCIA
+            if (ticket.uses >= maxLimit) {
+                resBox.className = "scan-result-card scan-warn";
+                resBox.innerText = `⚠️ OSTRZEŻENIE: Kod "${code}" już wykorzystany (${ticket.uses}/${maxLimit})!`;
+                if(settings.sound === "on") playBeep(400, 400);
+                return;
+            }
+
+            ticket.uses += 1;
+            updateUI();
+
+            resBox.className = "scan-result-card scan-success";
+            resBox.style.borderColor = "#34d399";
+            resBox.innerText = `✅ WEJŚCIE ZATWIERDZONE! Użycie ${ticket.uses} / ${maxLimit === 999999 ? '∞' : maxLimit}`;
+            if(settings.sound === "on") playBeep(900, 150);
+
+            document.getElementById('manual-input-code').value = '';
+        }
+
+        // --- GENERATOR MASOWY ---
+        function generateBatchCodes() {
+            let type = document.getElementById('gen-type').value;
+            let length = parseInt(document.getElementById('gen-length').value) || 8;
+            let count = parseInt(document.getElementById('gen-count').value) || 10;
+            let prefix = document.getElementById('gen-prefix').value.trim();
+
+            let chars = "";
+            if (type === 'alphanumeric') chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            else if (type === 'numeric') chars = "0123456789";
+            else if (type === 'alpha') chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+            let addedCount = 0;
+            for (let i = 0; i < count; i++) {
+                let code = prefix;
+                for (let j = 0; j < length; j++) {
+                    code += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                if (!tickets.some(t => t.code === code)) {
+                    tickets.push({
+                        code: code,
+                        uses: 0,
+                        maxUses: settings.maxUses
+                    });
+                    addedCount++;
+                }
+            }
+
+            updateUI();
+            alert(`Wygenerowano pomyślnie ${addedCount} kodów!`);
+            switchTab('database');
+        }
+
+        function importCustomCodes() {
+            let text = document.getElementById('import-textarea').value.trim();
+            if (!text) {
+                alert("Wklej jakieś kody!");
+                return;
+            }
+
+            let lines = text.split(/[\n,]+/).map(c => c.trim()).filter(c => c.length > 0);
+            let added = 0;
+
+            lines.forEach(code => {
+                if (!tickets.some(t => t.code === code)) {
+                    tickets.push({
+                        code: code,
+                        uses: 0,
+                        maxUses: settings.maxUses
+                    });
+                    added++;
+                }
+            });
+
+            document.getElementById('import-textarea').value = '';
+            updateUI();
+            alert(`Zaimportowano pomyślnie ${added} kodów!`);
+            switchTab('database');
+        }
+
+        function resetTicket(index) {
+            tickets[index].uses = 0;
+            updateUI();
+        }
+
+        function deleteTicket(index) {
+            if(confirm("Usunąć ten kod?")) {
+                tickets.splice(index, 1);
+                updateUI();
+            }
+        }
+
+        function clearAllTickets() {
+            if(confirm("Wyczyścić całą bazę?")) {
+                tickets = [];
+                updateUI();
+            }
+        }
+
+        function exportData() {
+            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tickets));
+            let dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", "passscan_backup.json");
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        function importDataPrompt() {
+            let jsonTxt = prompt("Wklej zawartość pliku JSON z kopią zapasową:");
+            if(jsonTxt) {
+                try {
+                    let parsed = JSON.parse(jsonTxt);
+                    if(Array.isArray(parsed)) {
+                        tickets = parsed;
+                        updateUI();
+                        alert("Przywrócono bazę danych!");
+                    }
+                } catch(e) {
+                    alert("Nieprawidłowy format JSON!");
+                }
+            }
+        }
+
+        function playBeep(freq, duration) {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + (duration / 1000));
+            } catch (e) {}
+        }
+    </script>
+</body>
+</html>
