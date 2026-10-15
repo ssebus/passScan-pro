@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PassScan Pro - System Biletowy</title>
+    <!-- Biblioteka do skanowania kodów QR z kamery -->
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: linear-gradient(135deg, #090d16, #1e1b4b);
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 12px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 440px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-bottom: 40px;
+        }
+
+        /* Nagłówek i statystyki */
+        .header-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .app-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            margin: 0 0 10px 0;
+            color: #38bdf8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            text-align: center;
+        }
+        .stat-box {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 8px 4px;
+            border-radius: 12px;
+        }
+        .stat-num {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #22c55e;
+        }
+        .stat-lbl {
+            font-size: 0.65rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+
+        /* Nawigacja / Zakładki */
+        .nav-tabs {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 5px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            padding: 10px 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .tab-btn.active {
+            background: #3b82f6;
+            color: white;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        /* Panele */
+        .panel {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .panel.active {
+            display: flex;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* Skaner kamery */
+        .camera-box {
+            position: relative;
+            width: 100%;
+            height: 260px;
+            background: #000;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 2px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #scanner-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .scanner-laser {
+            position: absolute;
+            width: 80%;
+            height: 2px;
+            background: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+            animation: scanAnim 2s infinite ease-in-out;
+            pointer-events: none;
+        }
+        @keyframes scanAnim {
+            0% { top: 15%; }
+            50% { top: 85%; }
+            100% { top: 15%; }
+        }
+
+        /* Komunikaty skanera */
+        .scan-result-card {
+            text-align: center;
+            padding: 14px;
+            border-radius: 14px;
+            font-weight: bold;
+            font-size: 1rem;
+            display: none;
+        }
+        .scan-success { background: rgba(34, 197, 94, 0.2); border: 2px solid #22c55e; color: #4ade80; }
+        .scan-error { background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; color: #f87171; }
+        .scan-warn { background: rgba(234, 179, 8, 0.2); border: 2px solid #eab308; color: #facc15; }
+
+        /* Formularze i przyciski */
+        .form-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 5px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        input, select, textarea {
+            width: 100%;
+            background: rgba(9, 13, 22, 0.8);
+            border: 1px solid #334155;
+            color: white;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: #3b82f6;
+        }
+        .btn {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 15px rgba(59, 130, 246,.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #991b1b); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
+        .btn-success { background: linear-gradient(135deg, #10b981, #047857); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
+
+        /* Lista biletów */
+        .ticket-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 350px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .ticket-item {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 10px 12px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .ticket-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .ticket-code {
+            font-family: monospace;
+            font-size: 0.95rem;
+            color: #38bdf8;
+            font-weight: bold;
+        }
+        .ticket-meta {
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+        .ticket-actions {
+            display: flex;
+            gap: 6px;
+        }
+        .icon-btn {
+            background: #334155;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+        }
+        
+        .row-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <!-- Nagłówek Statystyk -->
+        <div class="header-card">
+            <div class="app-title">
+                <span>🎫 PassScan Pro</span>
+                <span id="db-count" style="font-size:0.8rem; color:#94a3b8;">Baza: 0 kodów</span>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-num" id="stat-total">0</div>
+                    <div class="stat-lbl">Wszystkie</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="stat-scanned" style="color:#38bdf8;">0</div>
+                    <div class="stat-lbl">Użyte</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-num" id="stat-max">150</div>
+                    <div class="stat-lbl">Limit Gości</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Menu Nawigacji -->
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('scan')">📷 Skaner</button>
+            <button class="tab-btn" onclick="switchTab('generator')">⚙️ Generator & Baza</button>
+            <button class="tab-btn" onclick="switchTab('settings')">🛠️ Ustawienia</button>
+        </div>
+
+        <!-- PANEL 1: SKANER (Tylny aparat + Ręczne) -->
+        <div class="panel active" id="panel-scan">
+            <div class="card">
+                <div class="camera-box">
+                    <video id="scanner-video" autoplay playsinline muted></video>
+                    <div class="scanner-laser"></div>
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 6px;">
+                    <button class="btn" onclick="startScanner()" style="flex: 1;">▶ Włącz aparat</button>
+                    <button class="btn btn-danger" onclick="stopScanner()" style="flex: 1;">⏹ Wyłącz</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <label>Wpisz lub zeskanuj kod ręcznie:</label>
+                <div style="display: flex; gap: 6px;">
+                    <input type="text" id="manual-input-code" placeholder="Wprowadź kod biletu...">
+                    <button class="btn" onclick="verifyTicket(document.getElementById('manual-input-code').value)" style="width: 100px;">Sprawdź</button>
+                </div>
+            </div>
+
+            <div id="scan-result-box" class="scan-result-card">
+                Wynik skanowania
+            </div>
+        </div>
+
+        <!-- PANEL 2: GENERATOR I BAZA -->
+        <div class="panel" id="panel-generator">
+            <div class="card">
+                <h3 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #38bdf8;">✨ Generator Masowy Kodów</h3>
+                
+                <div class="row-group">
+                    <div class="form-group">
+                        <label>Typ znaków:</label>
+                        <select id="gen-type">
+                            <option value="alphanumeric">Litery i Cyfry</option>
+                            <option value="numeric">Tylko Cyfry</option>
+                            <option value="alpha">Tylko Litery</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Długość kodu:</label>
+                        <input type="number" id="gen-length" value="10" min="4" max="32">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Ilość kodów do wygenerowania:</label>
+                    <input type="number" id="gen-count" value="10" min="1" max="500">
+                </div>
+
+                <button class="btn btn-success" onclick="generateBatchCodes()">⚡ Wygeneruj i dodaj do bazy</button>
+            </div>
+
+            <div class="card">
+                <h3 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #38bdf8;">📥 Import własnej listy kodów</h3>
+                <div class="form-group">
+                    <label>Wklej kody (każdy w nowej linii lub po przecinku):</label>
+                    <textarea id="import-textarea" rows="3" placeholder="Wklej kody tutaj..."></textarea>
+                </div>
+                <button class="btn" onclick="importCustomCodes()">Dodaj z listy</button>
+            </div>
+
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h3 style="margin: 0; font-size: 0.9rem; color: #38bdf8;">📋 Aktywne kody w systemie</h3>
+                    <button class="btn btn-danger" onclick="clearAllTickets()" style="padding: 4px 10px; font-size: 0.7rem; width: auto;">Usuń wszystkie</button>
+                </div>
+                <div class="ticket-list" id="ticketListContainer"></div>
+            </div>
+        </div>
+
+        <!-- PANEL 3: USTAWIENIA -->
+        <div class="panel" id="panel-settings">
+            <div class="card">
+                <h3 style="margin: 0 0 12px 0; font-size: 0.95rem; color: #38bdf8;">⚙️ Reguły Walidacji i Limity</h3>
+
+                <div class="form-group">
+                    <label>Maksymalna liczba wejść na 1 kod (użycia):</label>
+                    <select id="setting-max-uses" onchange="saveSettings()">
+                        <option value="1">Tylko 1 raz (jednorazowy, potem blokada)</option>
+                        <option value="2">Dokładnie 2 razy (wejście + wyjście + powtórne wejście)</option>
+                        <option value="3">3 razy</option>
+                        <option value="5">5 razy</option>
+                        <option value="999999" selected>Nieskończoność (wielokrotne wejścia)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Limit maksymalny gości w bazie / imprezie:</label>
+                    <input type="number" id="setting-max-guests" value="150" onchange="saveSettings()">
+                </div>
+
+                <button class="btn btn-success" onclick="alert('Ustawienia zapisane pomyślnie!')" style="margin-top: 10px;">💾 Zapisz konfigurację</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let tickets = JSON.parse(localStorage.getItem('passscan_tickets')) || [
+            { code: "TEST-CODE-001", uses: 0, maxUses: 999999 },
+            { code: "VIP-PASS-999", uses: 0, maxUses: 1 }
+        ];
+
+        let settings = JSON.parse(localStorage.getItem('passscan_settings')) || {
+            maxUses: 999999,
+            maxGuests: 150
+        };
+
+        let codeReader = null;
+        let isScanningActive = false;
+
+        window.onload = () => {
+            loadSettingsToUI();
+            updateUI();
+        };
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            
+            if(tabId === 'scan') {
+                document.getElementById('panel-scan').classList.add('active');
+                event.target.classList.add('active');
+            } else if(tabId === 'generator') {
+                document.getElementById('panel-generator').classList.add('active');
+                stopScanner();
+                event.target.classList.add('active');
+            } else if(tabId === 'settings') {
+                document.getElementById('panel-settings').classList.add('active');
+                stopScanner();
+                event.target.classList.add('active');
+            }
+        }
+
+        function loadSettingsToUI() {
+            document.getElementById('setting-max-uses').value = settings.maxUses;
+            document.getElementById('setting-max-guests').value = settings.maxGuests;
+        }
+
+        function saveSettings() {
+            settings.maxUses = parseInt(document.getElementById('setting-max-uses').value);
+            settings.maxGuests = parseInt(document.getElementById('setting-max-guests').value);
+            localStorage.setItem('passscan_settings', JSON.stringify(settings));
+            updateUI();
+        }
+
+        function updateUI() {
+            localStorage.setItem('passscan_tickets', JSON.stringify(tickets));
+            
+            document.getElementById('stat-total').innerText = tickets.length;
+            let usedCount = tickets.filter(t => t.uses > 0).length;
+            document.getElementById('stat-scanned').innerText = usedCount;
+            document.getElementById('stat-max').innerText = settings.maxGuests;
+            document.getElementById('db-count').innerText = `Baza: ${tickets.length} kodów`;
+
+            let container = document.getElementById('ticketListContainer');
+            if(tickets.length === 0) {
+                container.innerHTML = '<div style="color: #64748b; font-size: 0.8rem; text-align: center; padding: 10px;">Brak kodów w bazie. Wygeneruj lub wklej własne.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            tickets.slice().reverse().forEach((t, idx) => {
+                let realIdx = tickets.length - 1 - idx;
+                let div = document.createElement('div');
+                div.className = 'ticket-item';
+                div.innerHTML = `
+                    <div class="ticket-info">
+                        <span class="ticket-code">${t.code}</span>
+                        <span class="ticket-meta">Użycia: ${t.uses} / ${t.maxUses === 999999 ? '∞' : t.maxUses}</span>
+                    </div>
+                    <div class="ticket-actions">
+                        <button class="icon-btn" onclick="verifyTicket('${t.code}')" title="Sprawdź">✔️</button>
+                        <button class="icon-btn" onclick="deleteTicket(${realIdx})" title="Usuń" style="background:#ef4444;">🗑️</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // --- POPRAWIONE URUCHAMIANIE TYLNEGO APARATU ---
+        async function startScanner() {
+            if (isScanningActive) return;
+            
+            try {
+                codeReader = new ZXing.BrowserQRCodeReader();
+                
+                // Pobieramy listę dostępnych urządzeń wideo, aby wybrać tylny aparat (environment)
+                const videoInputDevices = await codeReader.listVideoInputDevices();
+                let selectedDeviceId = undefined;
+                
+                if (videoInputDevices.length > 0) {
+                    // Szukamy tylnego aparatu po nazwie lub bierzemy ostatni dostępny
+                    let backCamera = videoInputDevices.find(device => 
+                        device.label.toLowerCase().includes('back') || 
+                        device.label.toLowerCase().includes('tylny') || 
+                        device.label.toLowerCase().includes('rear')
+                    );
+                    selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[videoInputDevices.length - 1].deviceId;
+                }
+
+                codeReader.decodeFromVideoDevice(selectedDeviceId, 'scanner-video', (result, err) => {
+                    if (result) {
+                        verifyTicket(result.getText());
+                    }
+                }).then(() => {
+                    isScanningActive = true;
+                });
+
+            } catch (err) {
+                console.error("Błąd uruchamiania kamery:", err);
+                alert("Nie można uruchomić tylnego aparatu. Upewnij się, że przyznałeś uprawnienia do kamery w przeglądarce.");
+            }
+        }
+
+        function stopScanner() {
+            if (codeReader) {
+                codeReader.reset();
+                isScanningActive = false;
+            }
+            let videoEl = document.getElementById('scanner-video');
+            if (videoEl && videoEl.srcObject) {
+                let stream = videoEl.srcObject;
+                stream.getTracks().forEach(track => track.stop());
+                videoEl.srcObject = null;
+            }
+        }
+
+        function verifyTicket(code) {
+            code = code.trim();
+            let resBox = document.getElementById('scan-result-box');
+            resBox.style.display = 'block';
+
+            if (!code) {
+                resBox.className = "scan-result-card scan-error";
+                resBox.innerText = "❌ Wprowadź lub zeskanuj kod!";
+                return;
+            }
+
+            let ticket = tickets.find(t => t.code === code);
+
+            if (!ticket) {
+                resBox.className = "scan-result-card scan-error";
+                resBox.innerText = `❌ BŁĄD: Kod "${code}" nie istnieje w bazie!`;
+                playBeep(300, 300);
+                return;
+            }
+
+            let maxLimit = ticket.maxUses !== undefined ? ticket.maxUses : settings.maxUses;
+
+            if (ticket.uses >= maxLimit) {
+                resBox.className = "scan-result-card scan-warn";
+                resBox.innerText = `⚠️ OSTRZEŻENIE: Kod "${code}" został już wykorzystany (${ticket.uses}/${maxLimit})!`;
+                playBeep(400, 400);
+                return;
+            }
+
+            ticket.uses += 1;
+            updateUI();
+
+            resBox.className = "scan-result-card scan-success";
+            resBox.innerText = `✅ BILET POPRAWNY! Wejście nr ${ticket.uses} / ${maxLimit === 999999 ? '∞' : maxLimit}`;
+            playBeep(900, 150);
+
+            document.getElementById('manual-input-code').value = '';
+        }
+
+        function generateBatchCodes() {
+            let type = document.getElementById('gen-type').value;
+            let length = parseInt(document.getElementById('gen-length').value) || 8;
+            let count = parseInt(document.getElementById('gen-count').value) || 10;
+
+            let chars = "";
+            if (type === 'alphanumeric') chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            else if (type === 'numeric') chars = "0123456789";
+            else if (type === 'alpha') chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+            let addedCount = 0;
+            for (let i = 0; i < count; i++) {
+                let code = "";
+                for (let j = 0; j < length; j++) {
+                    code += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                if (!tickets.some(t => t.code === code)) {
+                    tickets.push({
+                        code: code,
+                        uses: 0,
+                        maxUses: settings.maxUses
+                    });
+                    addedCount++;
+                }
+            }
+
+            updateUI();
+            alert(`Wygenerowano i dodano pomyślnie ${addedCount} nowych kodów!`);
+        }
+
+        function importCustomCodes() {
+            let text = document.getElementById('import-textarea').value.trim();
+            if (!text) {
+                alert("Wklej jakieś kody!");
+                return;
+            }
+
+            let lines = text.split(/[\n,]+/).map(c => c.trim()).filter(c => c.length > 0);
+            let added = 0;
+
+            lines.forEach(code => {
+                if (!tickets.some(t => t.code === code)) {
+                    tickets.push({
+                        code: code,
+                        uses: 0,
+                        maxUses: settings.maxUses
+                    });
+                    added++;
+                }
+            });
+
+            document.getElementById('import-textarea').value = '';
+            updateUI();
+            alert(`Zaimportowano pomyślnie ${added} kodów do systemu!`);
+        }
+
+        function deleteTicket(index) {
+            if(confirm("Czy na pewno chcesz usunąć ten kod?")) {
+                tickets.splice(index, 1);
+                updateUI();
+            }
+        }
+
+        function clearAllTickets() {
+            if(confirm("Czy na pewno wyczyścić całą bazę biletów?")) {
+                tickets = [];
+                updateUI();
+            }
+        }
+
+        function playBeep(freq, duration) {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + (duration / 1000));
+            } catch (e) {}
+        }
+    </script>
+</body>
+</html>
